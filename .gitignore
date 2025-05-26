@@ -1,4 +1,5 @@
-components/secrets.txt
+components/secrets.json
 .venv
 .history
+.cache
 __pycache__/
