@@ -1,0 +1,4 @@
+components/secrets.txt
+.venv
+.history
+__pycache__/
