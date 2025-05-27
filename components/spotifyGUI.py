@@ -128,9 +128,12 @@ class MiniSpotifyPlayer(ctk.CTkFrame):
         def loop():
             while True:
                 time.sleep(1)
-                self._updateLyricsContent()
-                self._updateLyricsHighlight()
-                self._updateProgress()
+                try:
+                    self.after(0, self._updateLyricsContent)
+                    self.after(0, self._updateLyricsHighlight)
+                    self.after(0, self._updateProgress)
+                except Exception as e:
+                    print("Update loop error:", e)
 
         threading.Thread(target=loop, daemon=True).start()
 

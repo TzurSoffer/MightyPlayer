@@ -96,7 +96,7 @@ class Song:
                 self.lyrics = self._findLyrics()
             return(True)
 
-        print("No track is currently playing.")
+        # print("No track is currently playing.")
         return(False)
 
     def _findLyrics(self) -> Lyrics:
