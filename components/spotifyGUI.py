@@ -11,14 +11,13 @@ from kivy.uix.button import ButtonBehavior
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
-from kivy.uix.spinner import Spinner
+from kivy.uix.spinner import Spinner, SpinnerOption
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.properties import BooleanProperty, NumericProperty, ListProperty
 from kivy.animation import Animation
 
 from spotify import SpotifyPlayer
-
 
 class HoverBehavior(object):
     hovered = BooleanProperty(False)
@@ -47,7 +46,6 @@ class HoverBehavior(object):
     def on_unhover(self):
         pass
 
-
 class ImageButton(ButtonBehavior, Image, HoverBehavior):
     def on_hover(self):
         Animation.cancel_all(self)
@@ -71,6 +69,14 @@ class ImageButton(ButtonBehavior, Image, HoverBehavior):
             base_w, base_h = self.texture_size
             self.size = (base_w * value, base_h * value)
 
+class DropdownOption(SpinnerOption):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = (0.6, 0.6, 0.6, .8)  #< Dark gray
+        self.color = (1, 1, 1, 1)    #< White
+        self.font_size = min(18, self.width/len(self.text)*3)  #< Responsive font size
+        self.size_hint_y = None
+        self.height = 50
 
 class MiniSpotifyPlayer(BoxLayout):
     progress = NumericProperty(0)
@@ -151,10 +157,14 @@ class MiniSpotifyPlayer(BoxLayout):
 
         # Playlist spinner
         playlist_names = [pl["name"] for pl in self.playlists]
-        self.playlist_spinner = Spinner(text=playlist_names[0] if playlist_names else '',
+        # self.playlist_spinner = ModernSpinner(text="Add To Playlist" if playlist_names else '',
+        self.playlist_spinner = Spinner(text="Add To Playlist" if playlist_names else '',
                                         values=playlist_names,
                                         size_hint=(None, None),
-                                        size=(180, 60))
+                                        size=(180, 60),
+                                        color=(0.9, 0.9, 0.9, 1),
+                                        background_color=(0.2, 0.2, 0.2, 1),
+                                        option_cls=DropdownOption)
         self.playlist_spinner.bind(text=self._add_to_selected_playlist)
         self.bottom_bar.add_widget(self.playlist_spinner)
 
