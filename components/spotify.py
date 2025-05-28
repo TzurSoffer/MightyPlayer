@@ -3,11 +3,9 @@ import json
 import threading
 import re
 import pyautogui
-import spotipy
 import syncedlyrics
+import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from spotipy.exceptions import SpotifyException
-
 
 # HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
 # TimeoutError: The read operation timed out
@@ -115,6 +113,7 @@ class Song:
         self.songName = None
         self.artistName = None
         self.albumName = None
+        self.isPlaying = False
         self.progress = None
         self.duration = None
         self.lyrics = None
@@ -122,22 +121,18 @@ class Song:
     def updateSongInfo(self) -> bool:
         current = retryOnTimeout(self.sp.current_playback)
 
-        if current and current["is_playing"]:
-            track = current["item"]
-
-            songName = track["name"]
-            self.artistsName = [artist["name"] for artist in track["artists"]]
-            self.artistName = self.artistsName[0] if self.artistsName else "Unknown Artist"
-            self.albumName = track["album"]["name"]
-            self.progress = current["progress_ms"]*0.001  #< Convert ms to seconds
-            self.duration = track["duration_ms"]*0.001    #< Convert ms to seconds
-            if songName != self.songName and type(songName) == str:
-                self.songName = songName
-                self.lyrics = self._findLyrics()
-            return(True)
-
-        # print("No track is currently playing.")
-        return(False)
+        track = current["item"]
+        songName = track["name"]
+        self.artistsName = [artist["name"] for artist in track["artists"]]
+        self.artistName = self.artistsName[0] if self.artistsName else "Unknown Artist"
+        self.albumName = track["album"]["name"]
+        self.isPlaying = current.get("is_playing", False)
+        self.progress = current["progress_ms"]*0.001  #< Convert ms to seconds
+        self.duration = track["duration_ms"]*0.001    #< Convert ms to seconds
+        if songName != self.songName and type(songName) == str:
+            self.songName = songName
+            self.lyrics = self._findLyrics()
+        return(True)
 
     def _findLyrics(self) -> Lyrics:
         return(Lyrics(syncedlyrics.search("{} - {}".format(self.songName, self.artistName))))
@@ -283,7 +278,13 @@ class SpotifyPlayer:
     def getPlaybackProgressPercent(self) -> float:
         """Returns the playback progress of the currently playing song in seconds."""
         return(self.song.progress/self.song.duration if self.song.duration else 0.0)
-    
+
+    def isPlaying(self) -> bool:
+        """
+        Returns True if a song is currently playing, False otherwise.
+        """
+        return(self.song.isPlaying)
+
     def seekTo(self, seconds) -> None:
         """
         Seeks to the specified time in seconds in the currently playing song.

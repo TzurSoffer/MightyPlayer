@@ -217,6 +217,7 @@ class MiniSpotifyPlayer(BoxLayout):
                 Clock.schedule_once(lambda dt: self._update_lyrics_content())
                 Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
                 Clock.schedule_once(lambda dt: self._update_progress())
+                Clock.schedule_once(lambda dt: self._updatePlayPauseButton())
 
         threading.Thread(target=loop, daemon=True).start()
 
@@ -286,6 +287,12 @@ class MiniSpotifyPlayer(BoxLayout):
             width = instance.width
             clicked_ratio = touch.x / width
             self.backend.seekToPercent(clicked_ratio)
+
+    def _updatePlayPauseButton(self, *args):
+        if self.backend.isPlaying():
+            self.play_btn.source = os.path.join(self.imageFolder, "pause.png")
+        else:
+            self.play_btn.source = os.path.join(self.imageFolder, "play.png")
 
 
 class MiniSpotifyApp(App):
