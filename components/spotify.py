@@ -6,6 +6,41 @@ import pyautogui
 import spotipy
 import syncedlyrics
 from spotipy.oauth2 import SpotifyOAuth
+from spotipy.exceptions import SpotifyException
+
+
+# HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
+# TimeoutError: The read operation timed out
+
+# The above exception was the direct cause of the following exception:
+
+# urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
+
+# During handling of the above exception, another exception occurred:
+
+#   File "D:\Projects\dashboard\components\spotify.py", line 161, in _isAuthenticated
+#     if not self.sp.current_user():
+#            ^^^^^^^^^^^^^^^^^^^^^^
+#   File "D:\Projects\dashboard\components\spotify.py", line 169, in _updateSongInfo
+#     if not self._isAuthenticated():
+#            ^^^^^^^^^^^^^^^^^^^^^^^
+#   File "D:\Projects\dashboard\components\spotify.py", line 263, in loop
+#     self._updateSongInfo()
+# requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
+
+def retryOnTimeout(func, retries=-1, backoff=2, *args, **kwargs):
+    attempt = 1
+    while True:
+        try:
+            return(func(*args, **kwargs))
+        except Exception as e:
+            print(f"Attempt {attempt} failed with error: {e}")
+            if attempt != retries:
+                time.sleep(backoff * (2 ** attempt))
+            else:
+                raise  #< Let the last exception propagate
+        attempt += 1
+
 
 class Lyrics:
     def __init__(self, lyrics):
@@ -80,7 +115,7 @@ class Song:
         self.lyrics = None
 
     def updateSongInfo(self) -> bool:
-        current = self.sp.current_playback()
+        current = retryOnTimeout(self.sp.current_playback)
 
         if current and current["is_playing"]:
             track = current["item"]
@@ -148,17 +183,26 @@ class SpotifyPlayer:
             self.clientSecret = secrets["spotify"]["clientSecret"]
             self.callbackUri = secrets["spotify"]["callbackUri"]
 
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+        self.sp = self._createSpotifyObject()
+        if not self._isAuthenticated():
+            print("Authentication failed. Please check your credentials.")
+            return
+
+        self.song = Song(self.sp)
+    
+    def _createSpotifyObject(self) -> spotipy.Spotify:
+        """
+        Creates a Spotify object with the current authentication.
+        """
+        return(spotipy.Spotify(auth_manager=SpotifyOAuth(
             client_id=self.clientID,
             client_secret=self.clientSecret,
             redirect_uri=self.callbackUri,
             scope="user-read-playback-state user-modify-playback-state user-library-modify playlist-modify-public playlist-modify-private"
-        ))
+        )))
 
-        self.song = Song(self.sp)
-    
     def _isAuthenticated(self) -> bool:
-        if not self.sp.current_user():
+        if not retryOnTimeout(self.sp.current_user):
             return(False)
         return(True)
     
@@ -235,16 +279,16 @@ class SpotifyPlayer:
         """Returns the playback progress of the currently playing song in seconds."""
         return(self.song.progress/self.song.duration if self.song.duration else 0.0)
     
-    def seekTo(self, seconds, isPremium=False) -> None:
+    def seekTo(self, seconds) -> None:
         """
         Seeks to the specified time in seconds in the currently playing song.
         """
-        if not isPremium:
-            print("Seeking is only available for Spotify Premium users.")
-            return()
-
-        if self._isAuthenticated() and self.song.progress is not None:
-            self.sp.seek_track(int(seconds * 1000))
+        try:
+            if self._isAuthenticated() and self.song.progress is not None:
+                self.sp.seek_track(int(seconds * 1000))
+        except:   #< If not premium user, this will fail
+            print("Seeking is not supported for non-premium users or if the song is not playing.")
+            pass
 
     def seekToPercent(self, percent) -> None:
         """
