@@ -1,3 +1,8 @@
+import os
+os.environ["KIVY_NO_CONSOLELOG"] = "1"
+import threading
+import time
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -11,9 +16,6 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.properties import BooleanProperty, NumericProperty, ListProperty
 from kivy.animation import Animation
-import threading
-import time
-import os
 
 from spotify import SpotifyPlayer
 
