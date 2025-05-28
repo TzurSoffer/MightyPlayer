@@ -2,4 +2,5 @@ components/secrets.json
 .venv
 .history
 .cache
+.old
 __pycache__/

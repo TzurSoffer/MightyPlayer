@@ -45,19 +45,24 @@ def retryOnTimeout(func, retries=-1, backoff=2, *args, **kwargs):
 class Lyrics:
     def __init__(self, lyrics):
         self.synced = self._isSynced(lyrics)
-        self.lyrics = self._convertToDict(lyrics.strip())
+        self.lyrics = self._convertToDict(lyrics)
 
     def _isSynced(self, lyrics) -> bool:
         """ Checks if the lyrics are synced. """
+        if lyrics == None:
+            return(False)
         timestampPattern = re.compile(r"\[\d{1,2}:\d{2}(?:\.\d{2})?\]")
         return(bool(timestampPattern.search(lyrics)))
     
     def _convertToDict(self, lyrics) -> dict:
+        if lyrics == None:
+            return({0.0: "No lyrics available, you will have to guess for this one :("})
+
         if not self.synced:
             return({0.0: lyrics})
 
         lyricsDict = {0.0: ""}                        #< Initialize with a default entry for 0 seconds
-        for line in lyrics.splitlines():
+        for line in lyrics.strip().splitlines():
             timestamp, text = line[1:].split("]", 1)
             timestamp = self.lrcToInr(timestamp)
             lyricsDict[timestamp] = text.strip()

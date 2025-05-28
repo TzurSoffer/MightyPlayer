@@ -1,197 +1,295 @@
-import customtkinter as ctk
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.image import Image
+from kivy.uix.button import ButtonBehavior
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.label import Label
+from kivy.uix.progressbar import ProgressBar
+from kivy.uix.spinner import Spinner
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.properties import BooleanProperty, NumericProperty, ListProperty
+from kivy.animation import Animation
 import threading
 import time
+import os
 
-# from components.spotify import SpotifyPlayer  # Replace with your actual backend module
-from spotify import SpotifyPlayer  # Replace with your actual backend module
+from spotify import SpotifyPlayer
 
-class MiniSpotifyPlayer(ctk.CTkFrame):
-    def __init__(self, master=None, backendUpdateInterval=2):
-        super().__init__(master)
-        
+
+class HoverBehavior(object):
+    hovered = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        Window.bind(mouse_pos=self.on_mouse_pos)
+
+    def on_mouse_pos(self, *args):
+        if not self.get_root_window():
+            return
+
+        pos = args[1]
+        inside = self.collide_point(*self.to_widget(*pos))
+        if self.hovered == inside:
+            return
+        self.hovered = inside
+        if inside:
+            self.on_hover()
+        else:
+            self.on_unhover()
+
+    def on_hover(self):
+        pass
+
+    def on_unhover(self):
+        pass
+
+
+class ImageButton(ButtonBehavior, Image, HoverBehavior):
+    def on_hover(self):
+        Animation.cancel_all(self)
+        anim = Animation(scale=1.2, duration=0.2)
+        anim.start(self)
+
+    def on_unhover(self):
+        Animation.cancel_all(self)
+        anim = Animation(scale=1.0, duration=0.2)
+        anim.start(self)
+
+    scale = NumericProperty(1.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(scale=self.update_scale)
+
+    def update_scale(self, instance, value):
+        # update size based on scale and texture size
+        if self.texture_size != (0, 0):
+            base_w, base_h = self.texture_size
+            self.size = (base_w * value, base_h * value)
+
+
+class MiniSpotifyPlayer(BoxLayout):
+    progress = NumericProperty(0)
+    lyrics_lines = ListProperty([])
+    playing = BooleanProperty(True)
+
+    def __init__(self, imageFolder="./components/images/", **kwargs):
+        super().__init__(orientation='vertical', **kwargs)
+        self.imageFolder = imageFolder
         self.backend = SpotifyPlayer(secretsFile="components/secrets.json")
-        self.backend.startUpdateLoop(updateInterval=backendUpdateInterval)
-        self.pack(padx=5, pady=5, fill="both", expand=True)
+        self.backend.startUpdateLoop(updateInterval=2)
 
-        self.playing = True
-        self.lyrics_lines = []
         self.current_index = 0
-        self.playlists = []
-
-        self._setupUI()
-        self._startUpdateLoop()
-
-        self.bind("<Configure>", self._onResize)  # Add resize awareness
-
-    def _onResize(self, event):
-        width, height = event.width, event.height
-        scale = min(width / 250, height / 250)
-
-        font_size = int(12 * scale)
-        highlight_size = int(14 * scale)
-        progress_height = max(8, int(10 * scale))
-        button_pad = int(4 * scale)
-
-        for i, label in enumerate(self.lyrics_labels):
-            if i == self.current_index:
-                label.configure(font=("Arial", highlight_size, "bold"))
-            else:
-                label.configure(font=("Arial", font_size))
-
-        self.progress.configure(height=progress_height)
-        for btn in (self.prev_btn, self.play_button, self.next_btn):
-            btn.configure(font=("Arial", font_size))
-            btn.pack_configure(padx=button_pad, ipadx=button_pad)
-
-    def _setupUI(self):
-        self.rowconfigure(0, weight=8)  # lyrics + controls
-        self.rowconfigure(1, weight=1)  # progress bar
-        self.rowconfigure(2, weight=1)  # bottom bar
-        self.columnconfigure(0, weight=1)
-
-        # --- Top: stack lyrics + controls ---
-        self.stack_container = ctk.CTkFrame(self)
-        self.stack_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=2)
-
-        self.stack_container.rowconfigure(0, weight=1)
-        self.stack_container.columnconfigure(0, weight=1)
-
-        self.lyrics_container = ctk.CTkFrame(self.stack_container)
-        self.lyrics_container.grid(row=0, column=0, sticky="nsew")
-
-        self.lyrics_scroll = ctk.CTkScrollableFrame(self.lyrics_container)
-        self.lyrics_scroll.pack(fill="both", expand=True)
-
-        self.lyrics_labels = []
-
-        self.controls_frame = ctk.CTkFrame(
-            self.stack_container, fg_color="transparent", bg_color="transparent"
-        )
-        self.controls_frame.place(relx=0.5, rely=0.5, anchor="center")
-        self.controls_frame.lift()
-
-        self.prev_btn = ctk.CTkButton(self.controls_frame, text="⏮", command=self.backend.previous)
-        self.play_button = ctk.CTkButton(self.controls_frame, text="⏸", command=self._togglePlay)
-        self.next_btn = ctk.CTkButton(self.controls_frame, text="⏭", command=self.backend.next)
-
-        for btn in (self.prev_btn, self.play_button, self.next_btn):
-            btn.pack(side="left", padx=5, ipadx=2, expand=True, fill="x")
-
-        self.lyrics_scroll.bind("<Enter>", lambda e: self._setControlsVisible(True))
-        self.lyrics_scroll.bind("<Leave>", self._checkIfStillHovering)
-        self.controls_frame.bind("<Enter>", lambda e: self._setControlsVisible(True))
-        self.controls_frame.bind("<Leave>", self._checkIfStillHovering)
-
-        self._setControlsVisible(False)
-
-        # --- Middle: progress bar ---
-        self.progress_var = ctk.DoubleVar()
-        self.progress = ctk.CTkProgressBar(self, variable=self.progress_var, mode="determinate")
-        self.progress.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
-        self.progress.bind("<Button-1>", self._onProgressClick)
-
-        # --- Bottom: like and playlist ---
-        bottom_frame = ctk.CTkFrame(self)
-        bottom_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=2)
-
-        bottom_frame.columnconfigure((0, 1), weight=1)
-
-        ctk.CTkButton(bottom_frame, text="❤️ Like", command=self.backend.likeCurrentSong).grid(
-            row=0, column=0, padx=5, sticky="ew"
-        )
-
         self.playlists = self.backend.getAvailablePlaylists()
+
+        self._setup_ui()
+        self._start_update_loop()
+
+    def _setup_ui(self):
+        # Root is FloatLayout to allow floating widgets (like centered controls)
+        self.root_layout = FloatLayout()
+        self.add_widget(self.root_layout)
+
+        # Dark background
+        with self.canvas.before:
+            from kivy.graphics import Color, Rectangle
+            Color(0.12, 0.12, 0.12, 1)
+            self.bg_rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update_bg_rect, size=self._update_bg_rect)
+
+        # Lyrics scroll view (placed inside root layout, fills most of screen)
+        self.lyrics_box = BoxLayout(orientation='vertical', size_hint_y=None, padding=10)
+        self.lyrics_box.bind(minimum_height=self.lyrics_box.setter('height'))
+
+        self.scroll = ScrollView(size_hint=(1, 0.9), pos_hint={'x': 0, 'y': 0.1})
+        self.scroll.add_widget(self.lyrics_box)
+        self.root_layout.add_widget(self.scroll)
+
+        # Centered controls container — transparent and floating
+        self.controls_container = BoxLayout(size_hint=(None, None), spacing=30)
+        self.controls_container.size = (60*3 + 30*2, 60)
+        self.controls_container.pos_hint = {"center_x": 0.5, "center_y": 0.5}
+        self.controls_container.opacity = 0  # start hidden
+        self.controls_container.hovered = False
+
+        btn_size = (60, 60)
+        self.prev_btn = ImageButton(source=os.path.join(self.imageFolder, "previous.png"),
+                                    size_hint=(None, None), size=btn_size)
+        self.prev_btn.bind(on_press=lambda x: self.backend.previous())
+
+        self.play_btn = ImageButton(source=os.path.join(self.imageFolder, "pause.png"),
+                                    size_hint=(None, None), size=btn_size)
+        self.play_btn.bind(on_press=self._toggle_play)
+
+        self.next_btn = ImageButton(source=os.path.join(self.imageFolder, "next.png"),
+                                    size_hint=(None, None), size=btn_size)
+        self.next_btn.bind(on_press=lambda x: self.backend.next())
+
+        self.controls_container.add_widget(self.prev_btn)
+        self.controls_container.add_widget(self.play_btn)
+        self.controls_container.add_widget(self.next_btn)
+
+        self.root_layout.add_widget(self.controls_container)
+
+        # Bottom bar (like + playlist) — now floating at the bottom
+        self.bottom_bar = BoxLayout(orientation='horizontal', size_hint=(1, None),
+                                    height=80, padding=10, spacing=20,
+                                    pos_hint={'x': 0, 'y': 0.05})
+        self.root_layout.add_widget(self.bottom_bar)
+
+        # Like button
+        like_img_path = os.path.join(self.imageFolder, "heart.png")
+        self.like_btn = ImageButton(source=like_img_path, size_hint=(None, None), size=(60, 60))
+        self.like_btn.bind(on_press=lambda x: self.backend.likeCurrentSong())
+        self.bottom_bar.add_widget(self.like_btn)
+
+        self.bottom_bar.add_widget(BoxLayout())  # Spacer
+
+        # Playlist spinner
         playlist_names = [pl["name"] for pl in self.playlists]
-        self.playlist_dropdown = ctk.CTkOptionMenu(
-            bottom_frame, values=playlist_names, command=self._addToSelectedPlaylist
-        )
-        self.playlist_dropdown.grid(row=0, column=1, padx=5, sticky="ew")
+        self.playlist_spinner = Spinner(text=playlist_names[0] if playlist_names else '',
+                                        values=playlist_names,
+                                        size_hint=(None, None),
+                                        size=(180, 60))
+        self.playlist_spinner.bind(text=self._add_to_selected_playlist)
+        self.bottom_bar.add_widget(self.playlist_spinner)
 
-        # Lyrics setup (keep as-is)
-        lyrics = self.backend.getLyrics().splitlines()
-        for line in lyrics:
-            label = ctk.CTkLabel(self.lyrics_scroll, text=line, anchor="center", font=("Arial", 16), justify="center")
-            label.pack(fill="x", pady=1)
-            self.lyrics_labels.append(label)
+        # Progress bar (still pinned to bottom of root layout)
+        self.progress_bar = ProgressBar(size_hint=(1, None), height=15, pos_hint={'x': 0, 'y': 0})
+        self.progress_bar.max = 1
+        self.progress_bar.bind(on_touch_down=self._on_progress_touch)
+        self.root_layout.add_widget(self.progress_bar)
 
-    def _togglePlay(self):
+        # Hover logic for center controls only
+        def on_mouse_pos(window, pos):
+            # Get position and size of the controls container
+            x, y = self.controls_container.to_window(*self.controls_container.pos)
+            width, height = self.controls_container.size
+
+            # Add margin around the controls (e.g., 30px above and below)
+            margin_vertical = 80
+            margin_horizontal = 50  # optional
+
+            in_x = x - margin_horizontal <= pos[0] <= x + width + margin_horizontal
+            in_y = y - margin_vertical <= pos[1] <= y + height + margin_vertical
+
+            if in_x and in_y:
+                self._show_controls()
+            else:
+                self._hide_controls()
+
+        Window.bind(mouse_pos=on_mouse_pos)
+
+        self._update_lyrics_content()
+
+    def _show_controls(self):
+        if self.controls_container.opacity == 0:
+            Animation.cancel_all(self.controls_container)
+            Animation(opacity=1, d=0.25).start(self.controls_container)
+
+    def _hide_controls(self):
+        if self.controls_container.opacity == 1:
+            Animation.cancel_all(self.controls_container)
+            Animation(opacity=0, d=0.25).start(self.controls_container)
+
+    def _update_bg_rect(self, *args):
+        self.bg_rect.pos = self.pos
+        self.bg_rect.size = self.size
+
+    def _toggle_play(self, *args):
         self.backend.pausePlay()
         self.playing = not self.playing
-        self.play_button.configure(text="⏸" if self.playing else "▶️")
+        self.play_btn.source = os.path.join(self.imageFolder, "pause.png") if self.playing else os.path.join(self.imageFolder, "play.png")
 
-    def _addToSelectedPlaylist(self, playlist_name):
+    def _add_to_selected_playlist(self, spinner, playlist_name):
         selected = next((pl for pl in self.playlists if pl["name"] == playlist_name), None)
         if selected:
             self.backend.addToPlaylist(selected["id"])
 
-    def _startUpdateLoop(self):
+    def _start_update_loop(self):
         def loop():
             while True:
                 time.sleep(1)
-                try:
-                    self.after(0, self._updateLyricsContent)
-                    self.after(0, self._updateLyricsHighlight)
-                    self.after(0, self._updateProgress)
-                except Exception as e:
-                    print("Update loop error:", e)
+                Clock.schedule_once(lambda dt: self._update_lyrics_content())
+                Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
+                Clock.schedule_once(lambda dt: self._update_progress())
 
         threading.Thread(target=loop, daemon=True).start()
 
-    def _updateLyricsContent(self):
+    def _update_lyrics_content(self, *args):
         lyrics = self.backend.getLyrics().splitlines()
-        if lyrics != [label.cget("text") for label in self.lyrics_labels]:
-            for label in self.lyrics_labels:
-                label.destroy()
-            self.lyrics_labels.clear()
+        if lyrics != [lbl.text for lbl in self.lyrics_box.children[::-1]]:
+            self.lyrics_box.clear_widgets()
             for line in lyrics:
-                label = ctk.CTkLabel(self.lyrics_scroll, text=line, anchor="center", font=("Arial", 16), justify="center")
-                label.pack(fill="x", pady=2)
-                self.lyrics_labels.append(label)
+                lbl = Label(
+                    text=line,
+                    halign='center',
+                    markup=True,
+                    size_hint_y=None,
+                    height=40,
+                    font_size=24,
+                    color=(0.9, 0.9, 0.9, 1)
+                )
+                lbl.bind(size=lambda inst, val: inst.setter('text_size')(inst, (inst.width, None)))
+                self.lyrics_box.add_widget(lbl)
+            self.lyrics_lines = self.lyrics_box.children[::-1]
 
-    def _updateLyricsHighlight(self):
+    def _update_lyrics_highlight(self, *args):
         self.current_index = self.backend.getCurrentLyricIndex()
-        for i, label in enumerate(self.lyrics_labels):
+        lyrics_lines_text = self.backend.getLyrics().splitlines()
+
+        for i, lbl in enumerate(self.lyrics_lines):
+            line = lyrics_lines_text[i]
             if i == self.current_index:
-                label.configure(font=("Arial", 18, "bold"))
+                lbl.text = f"[b][color=3399FFFF]{line}[/color][/b]"
+                lbl.font_size = 30
             else:
-                label.configure(font=("Arial", 16))
+                lbl.text = line
+                lbl.font_size = 24
 
-        if self.lyrics_labels:
-            total_lines = len(self.lyrics_labels)
-            if total_lines > 0:
-                center_ratio = max(0, (self.current_index - 3) / max(1, total_lines))
-                self.lyrics_scroll._parent_canvas.yview_moveto(center_ratio)
+        # Delay the scroll adjustment to next frame so layout has been updated
+        Clock.schedule_once(self._center_current_line, 0)
 
-    def _updateProgress(self):
+    def _center_current_line(self, dt):
+        if not self.lyrics_lines or self.current_index >= len(self.lyrics_lines):
+            return
+
+        line_height = self.lyrics_lines[0].height if self.lyrics_lines else 40
+        index = self.current_index
+        content_height = self.lyrics_box.height
+        viewport_height = self.scroll.height
+
+        offset_from_bottom = line_height * index + line_height / 2
+        desired_scroll_pos = offset_from_bottom - viewport_height / 2
+
+        max_scroll = content_height - viewport_height
+        if max_scroll < 1:
+            max_scroll = 1
+
+        scroll_y = desired_scroll_pos / max_scroll
+        scroll_y = max(0, min(scroll_y, 1))
+
+        self.scroll.scroll_y = 1 - scroll_y
+
+    def _update_progress(self, *args):
         progress = self.backend.getPlaybackProgressPercent()
         if 0 <= progress <= 1:
-            self.progress_var.set(progress)
+            self.progress = progress
+            self.progress_bar.value = progress
 
-    def _onProgressClick(self, event):
-        width = self.progress.winfo_width()
-        clicked_ratio = event.x / width
-        self.backend.seekToPercent(clicked_ratio)
-
-    def _setControlsVisible(self, visible):
-        if visible:
-            self.controls_frame.place(relx=0.5, rely=0.5, anchor="center")
-        else:
-            self.controls_frame.place_forget()
-
-    def _checkIfStillHovering(self, event=None):
-        widget_under_mouse = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
-        if widget_under_mouse not in (self.lyrics_scroll, self.controls_frame):
-            self._setControlsVisible(False)
+    def _on_progress_touch(self, instance, touch):
+        if instance.collide_point(*touch.pos):
+            width = instance.width
+            clicked_ratio = touch.x / width
+            self.backend.seekToPercent(clicked_ratio)
 
 
-# Standalone launcher
+class MiniSpotifyApp(App):
+    def build(self):
+        return MiniSpotifyPlayer()
+
+
 if __name__ == "__main__":
-    ctk.set_appearance_mode("System")
-    ctk.set_default_color_theme("blue")
-
-    app = ctk.CTk()
-    app.title("Mini Spotify Player")
-    app.geometry("250x250")
-
-    MiniSpotifyPlayer(master=app)
-    app.mainloop()
+    MiniSpotifyApp().run()
