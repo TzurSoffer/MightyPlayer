@@ -337,16 +337,16 @@ class MiniSpotifyPlayer(BoxLayout):
 
 
 class MiniSpotifyApp(App):
-    def __init__(self, size=(300,300), imageFolder="./images/", secretsFile="secrets.json", **kwargs):
+    def __init__(self, size=(300,300), imageFolder="./images/", secretsFile="secrets.json", title="Mini Spotify Player", **kwargs):
         Window.size = size
         super().__init__(**kwargs)
+        self.title = title
         self.imageFolder = imageFolder
         self.secretsFile = secretsFile
 
     def build(self):
-        self.title = "Mini Spotify Player"
+        Window.always_on_top = True  #< This keeps the window on top
         return(MiniSpotifyPlayer(imageFolder=self.imageFolder, secretsFile=self.secretsFile))
-
 
 if __name__ == "__main__":
     MiniSpotifyApp(secretsFile="mySecrets.json").run()
