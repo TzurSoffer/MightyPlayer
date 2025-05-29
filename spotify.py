@@ -20,7 +20,6 @@ def retryOnTimeout(func, retries=-1, backoff=2, *args, **kwargs):
                 raise  #< Let the last exception propagate
         attempt += 1
 
-
 class Lyrics:
     def __init__(self, lyrics):
         self.synced = self._isSynced(lyrics)
@@ -312,9 +311,9 @@ class SpotifyPlayer:
         """
         def loop():
             while True:
-                self._updateSongInfo()
                 time.sleep(updateInterval)
-                if callback:
+                self._updateSongInfo()
+                if callable(callback):
                     callback(self.song)
         
         threading.Thread(target=loop, daemon=True).start()

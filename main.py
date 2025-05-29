@@ -102,7 +102,6 @@ class Timer:
 class MiniSpotifyPlayer(BoxLayout):
     progress = NumericProperty(0)
     lyrics_lines = ListProperty([])
-    playing = BooleanProperty(True)
 
     def __init__(self, imageFolder="./images/", secretsFile="secrets.json", **kwargs):
         super().__init__(orientation='vertical', **kwargs)
@@ -113,6 +112,7 @@ class MiniSpotifyPlayer(BoxLayout):
         self.lastMouseMoveTime = time.time()
         self.isInsideControlsRegion = False
         self.idleCheckEvent = None
+        self.playing = True
 
         self.current_index = 0
         self.time = Timer()
@@ -242,7 +242,6 @@ class MiniSpotifyPlayer(BoxLayout):
         elif time.time() - self.lastMouseMoveTime > 1:
             self._hide_controls()
 
-
     def _show_controls(self):
         if self.controls_container.opacity == 0:
             Animation.cancel_all(self.controls_container)
@@ -278,29 +277,30 @@ class MiniSpotifyPlayer(BoxLayout):
     
     def _update(self, *args):
         self.time.setTime(self.backend.getCurrentTime())
+        self.playing = self.backend.isPlaying()
         Clock.schedule_once(lambda dt: self._update_lyrics())
         Clock.schedule_once(lambda dt: self._update_progress())
         Clock.schedule_once(lambda dt: self._updatePlayPauseButton())
     
     def _update_lyrics(self, *args):
         lyrics = self.backend.getLyrics().splitlines()
-        if lyrics != [lbl.text for lbl in self.lyrics_box.children[::-1]]:
-            self.lyrics_box.clear_widgets()
-            for line in lyrics:
-                lbl = Label(
-                    text=line,
-                    halign='center',
-                    markup=True,
-                    size_hint_y=None,
-                    height=40,
-                    font_size=calcFontSize(line, self.width, 24),
-                    color=(0.9, 0.9, 0.9, 1)
-                )
-                lbl.bind(size=lambda inst, val: inst.setter('text_size')(inst, (inst.width, None)))
-                self.lyrics_box.add_widget(lbl)
-            self.lyrics_lines = self.lyrics_box.children[::-1]
-            if self.backend.isSynced():
-                self._update_lyrics_highlight()
+        # if lyrics != [lbl.text for lbl in self.lyrics_box.children[::-1]]:
+        self.lyrics_box.clear_widgets()
+        for line in lyrics:
+            lbl = Label(
+                text=line,
+                halign='center',
+                markup=True,
+                size_hint_y=None,
+                height=40,
+                font_size=calcFontSize(line, self.width, 24),
+                color=(0.9, 0.9, 0.9, 1)
+            )
+            lbl.bind(size=lambda inst, val: inst.setter('text_size')(inst, (inst.width, None)))
+            self.lyrics_box.add_widget(lbl)
+        self.lyrics_lines = self.lyrics_box.children[::-1]
+        if self.backend.isSynced() and self.backend.isPlaying():
+            self._update_lyrics_highlight()
 
     def _update_lyrics_highlight(self, *args):
         self.current_index = self.backend.getCurrentLyricIndex(at=self.time.getTime())
@@ -357,7 +357,6 @@ class MiniSpotifyPlayer(BoxLayout):
             self.play_btn.source = os.path.join(self.imageFolder, "pause.png")
         else:
             self.play_btn.source = os.path.join(self.imageFolder, "play.png")
-
 
 class MiniSpotifyApp(App):
     def __init__(self, size=(300,300), imageFolder="./images/", secretsFile="secrets.json", title="Mini Spotify Player", **kwargs):
