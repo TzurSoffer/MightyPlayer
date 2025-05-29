@@ -7,25 +7,6 @@ import syncedlyrics
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-# HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
-# TimeoutError: The read operation timed out
-
-# The above exception was the direct cause of the following exception:
-
-# urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
-
-# During handling of the above exception, another exception occurred:
-
-#   File "D:\Projects\dashboard\components\spotify.py", line 161, in _isAuthenticated
-#     if not self.sp.current_user():
-#            ^^^^^^^^^^^^^^^^^^^^^^
-#   File "D:\Projects\dashboard\components\spotify.py", line 169, in _updateSongInfo
-#     if not self._isAuthenticated():
-#            ^^^^^^^^^^^^^^^^^^^^^^^
-#   File "D:\Projects\dashboard\components\spotify.py", line 263, in loop
-#     self._updateSongInfo()
-# requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='api.spotify.com', port=443): Read timed out. (read timeout=5)
-
 def retryOnTimeout(func, retries=-1, backoff=2, *args, **kwargs):
     attempt = 1
     while True:
@@ -51,6 +32,10 @@ class Lyrics:
             return(False)
         timestampPattern = re.compile(r"\[\d{1,2}:\d{2}(?:\.\d{2})?\]")
         return(bool(timestampPattern.search(lyrics)))
+    
+    def isSynced(self) -> bool:
+        """ Returns True if the lyrics are synced, False otherwise. """
+        return(self.synced)
     
     def _convertToDict(self, lyrics) -> dict:
         if lyrics == None:
@@ -264,6 +249,12 @@ class SpotifyPlayer:
             index = list(self.song.lyrics.lyrics.keys()).index(timestamp)
             return(index)
         return(-1)
+    
+    def isSynced(self) -> bool:
+        """Returns True if the lyrics are synced, False otherwise."""
+        if self.song.lyrics == None:
+            return(False)
+        return(self.song.lyrics.isSynced())
     
     def likeCurrentSong(self) -> bool:
         """Likes the currently playing song on the user"s active device."""

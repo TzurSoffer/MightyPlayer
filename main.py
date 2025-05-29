@@ -1,3 +1,4 @@
+import copy
 import os
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 import threading
@@ -18,6 +19,12 @@ from kivy.properties import BooleanProperty, NumericProperty, ListProperty
 from kivy.animation import Animation
 
 from spotify import SpotifyPlayer
+
+def calcFontSize(text, width, maxSize, multiplier=2):
+    """Calculate a responsive font size based on text length and available width."""
+    if not text:
+        return(maxSize)
+    return(min(maxSize, width/len(text)*multiplier))
 
 class HoverBehavior(object):
     hovered = BooleanProperty(False)
@@ -74,7 +81,7 @@ class DropdownOption(SpinnerOption):
         super().__init__(**kwargs)
         self.background_color = (0.6, 0.6, 0.6, .8)            #< Dark gray
         self.color = (1, 1, 1, 1)                              #< White
-        self.font_size = min(18, self.width/len(self.text)*3)  #< Responsive font size
+        self.font_size = calcFontSize(self.text, self.width, 18)  #< Responsive font size
         self.size_hint_y = None
         self.height = 50
 
@@ -167,9 +174,10 @@ class MiniSpotifyPlayer(BoxLayout):
         like_img_path = os.path.join(self.imageFolder, "heart.png")
         self.like_btn = ImageButton(source=like_img_path, size_hint=(None, None), size=(60, 60))
         self.like_btn.bind(on_press=lambda x: self.backend.likeCurrentSong())
+        
+        self.bottom_bar.add_widget(BoxLayout())  # Spacer
         self.bottom_bar.add_widget(self.like_btn)
 
-        self.bottom_bar.add_widget(BoxLayout())  # Spacer
 
         # Playlist spinner
         playlist_names = [pl["name"] for pl in self.playlists]
@@ -177,7 +185,7 @@ class MiniSpotifyPlayer(BoxLayout):
         self.playlist_spinner = Spinner(text="Add To Playlist" if playlist_names else '',
                                         values=playlist_names,
                                         size_hint=(None, None),
-                                        size=(180, 60),
+                                        size=(120, 60),
                                         color=(0.9, 0.9, 0.9, 1),
                                         background_color=(0.2, 0.2, 0.2, 1),
                                         option_cls=DropdownOption)
@@ -210,7 +218,7 @@ class MiniSpotifyPlayer(BoxLayout):
 
         Window.bind(mouse_pos=on_mouse_pos)
 
-        self._update_lyrics_content()
+        self._update_lyrics()
 
     def _show_controls(self):
         if self.controls_container.opacity == 0:
@@ -240,20 +248,18 @@ class MiniSpotifyPlayer(BoxLayout):
         def loop():
             while True:
                 time.sleep(0.1)
-                Clock.schedule_once(lambda dt: self._update_lyrics_content())
-                Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
+                Clock.schedule_once(lambda dt: self._update_lyrics())
                 Clock.schedule_once(lambda dt: self._update_progress())
 
         threading.Thread(target=loop, daemon=True).start()
     
     def _update(self, *args):
         self.time.setTime(self.backend.getCurrentTime())
-        Clock.schedule_once(lambda dt: self._update_lyrics_content())
-        Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
+        Clock.schedule_once(lambda dt: self._update_lyrics())
         Clock.schedule_once(lambda dt: self._update_progress())
         Clock.schedule_once(lambda dt: self._updatePlayPauseButton())
     
-    def _update_lyrics_content(self, *args):
+    def _update_lyrics(self, *args):
         lyrics = self.backend.getLyrics().splitlines()
         if lyrics != [lbl.text for lbl in self.lyrics_box.children[::-1]]:
             self.lyrics_box.clear_widgets()
@@ -264,25 +270,26 @@ class MiniSpotifyPlayer(BoxLayout):
                     markup=True,
                     size_hint_y=None,
                     height=40,
-                    font_size=24,
+                    font_size=calcFontSize(line, self.width, 24),
                     color=(0.9, 0.9, 0.9, 1)
                 )
                 lbl.bind(size=lambda inst, val: inst.setter('text_size')(inst, (inst.width, None)))
                 self.lyrics_box.add_widget(lbl)
             self.lyrics_lines = self.lyrics_box.children[::-1]
+            if self.backend.isSynced():
+                self._update_lyrics_highlight()
 
     def _update_lyrics_highlight(self, *args):
         self.current_index = self.backend.getCurrentLyricIndex(at=self.time.getTime())
         lyrics_lines_text = self.backend.getLyrics().splitlines()
-
         for i, lbl in enumerate(self.lyrics_lines):
             line = lyrics_lines_text[i]
             if i == self.current_index:
                 lbl.text = f"[b][color=3399FFFF]{line}[/color][/b]"
-                lbl.font_size = 30
+                lbl.font_size=calcFontSize(line, self.width, 30)
             else:
                 lbl.text = line
-                lbl.font_size = 24
+                lbl.font_size=calcFontSize(line, self.width, 24)
 
         # Delay the scroll adjustment to next frame so layout has been updated
         Clock.schedule_once(self._center_current_line, 0)
@@ -330,7 +337,8 @@ class MiniSpotifyPlayer(BoxLayout):
 
 
 class MiniSpotifyApp(App):
-    def __init__(self, imageFolder="./images/", secretsFile="secrets.json", **kwargs):
+    def __init__(self, size=(300,300), imageFolder="./images/", secretsFile="secrets.json", **kwargs):
+        Window.size = size
         super().__init__(**kwargs)
         self.imageFolder = imageFolder
         self.secretsFile = secretsFile
@@ -341,4 +349,4 @@ class MiniSpotifyApp(App):
 
 
 if __name__ == "__main__":
-    MiniSpotifyApp(secretsFile="secrets.json").run()
+    MiniSpotifyApp(secretsFile="mySecrets.json").run()
