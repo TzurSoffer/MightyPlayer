@@ -72,11 +72,26 @@ class ImageButton(ButtonBehavior, Image, HoverBehavior):
 class DropdownOption(SpinnerOption):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.background_color = (0.6, 0.6, 0.6, .8)  #< Dark gray
-        self.color = (1, 1, 1, 1)    #< White
+        self.background_color = (0.6, 0.6, 0.6, .8)            #< Dark gray
+        self.color = (1, 1, 1, 1)                              #< White
         self.font_size = min(18, self.width/len(self.text)*3)  #< Responsive font size
         self.size_hint_y = None
         self.height = 50
+
+class Timer:
+    def __init__(self):
+        self.timeNow = time.time()
+        self.time = 0
+    
+    def setTime(self, setTime):
+        self.time = setTime
+        self.timeNow = time.time()
+    
+    def getTime(self):
+        return(self.time + (time.time() - self.timeNow))
+
+    def __repr__(self):
+        return(self.getTime())
 
 class MiniSpotifyPlayer(BoxLayout):
     progress = NumericProperty(0)
@@ -87,9 +102,10 @@ class MiniSpotifyPlayer(BoxLayout):
         super().__init__(orientation='vertical', **kwargs)
         self.imageFolder = imageFolder
         self.backend = SpotifyPlayer(secretsFile="components/secrets.json")
-        self.backend.startUpdateLoop(updateInterval=2)
+        self.backend.startUpdateLoop(updateInterval=2, callback=self._update)
 
         self.current_index = 0
+        self.time = Timer()
         self.playlists = self.backend.getAvailablePlaylists()
 
         self._setup_ui()
@@ -223,14 +239,20 @@ class MiniSpotifyPlayer(BoxLayout):
     def _start_update_loop(self):
         def loop():
             while True:
-                time.sleep(1)
+                time.sleep(0.1)
                 Clock.schedule_once(lambda dt: self._update_lyrics_content())
                 Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
                 Clock.schedule_once(lambda dt: self._update_progress())
-                Clock.schedule_once(lambda dt: self._updatePlayPauseButton())
 
         threading.Thread(target=loop, daemon=True).start()
-
+    
+    def _update(self, *args):
+        self.time.setTime(self.backend.getCurrentTime())
+        Clock.schedule_once(lambda dt: self._update_lyrics_content())
+        Clock.schedule_once(lambda dt: self._update_lyrics_highlight())
+        Clock.schedule_once(lambda dt: self._update_progress())
+        Clock.schedule_once(lambda dt: self._updatePlayPauseButton())
+    
     def _update_lyrics_content(self, *args):
         lyrics = self.backend.getLyrics().splitlines()
         if lyrics != [lbl.text for lbl in self.lyrics_box.children[::-1]]:
@@ -250,7 +272,7 @@ class MiniSpotifyPlayer(BoxLayout):
             self.lyrics_lines = self.lyrics_box.children[::-1]
 
     def _update_lyrics_highlight(self, *args):
-        self.current_index = self.backend.getCurrentLyricIndex()
+        self.current_index = self.backend.getCurrentLyricIndex(at=self.time.getTime())
         lyrics_lines_text = self.backend.getLyrics().splitlines()
 
         for i, lbl in enumerate(self.lyrics_lines):
@@ -287,10 +309,12 @@ class MiniSpotifyPlayer(BoxLayout):
         self.scroll.scroll_y = 1 - scroll_y
 
     def _update_progress(self, *args):
-        progress = self.backend.getPlaybackProgressPercent()
-        if 0 <= progress <= 1:
-            self.progress = progress
-            self.progress_bar.value = progress
+        if not self.backend.getSongDuration():
+            progress = 0.0
+        else:
+            progress = min(1, self.time.getTime()/self.backend.getSongDuration())
+        self.progress = progress
+        self.progress_bar.value = progress
 
     def _on_progress_touch(self, instance, touch):
         if instance.collide_point(*touch.pos):

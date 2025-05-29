@@ -114,7 +114,7 @@ class Song:
         self.artistName = None
         self.albumName = None
         self.isPlaying = False
-        self.progress = None
+        self.progress = 0.0
         self.duration = None
         self.lyrics = None
 
@@ -142,9 +142,11 @@ class Song:
             return(self.lyrics.getLyricsFromTimeStamp(self.progress))
         return("No lyrics available for this song :(")
     
-    def getCurrentLyricTimestamp(self) -> float:
+    def getCurrentLyricTimestamp(self, at=None) -> float:
         if self.lyrics:
-            return(self.lyrics.getNearestTimestamp(self.progress))
+            if at == None:
+                at = self.progress
+            return(self.lyrics.getNearestTimestamp(at))
         return(0.0)
     
     def like(self) -> bool:
@@ -255,9 +257,10 @@ class SpotifyPlayer:
         """Returns the currently playing song lyrics."""
         return(self.song.getCurrentLyric())
 
-    def getCurrentLyricIndex(self) -> int:
+    def getCurrentLyricIndex(self, timestamp=None, at=None) -> int:
         if self.song.lyrics:
-            timestamp = self.song.getCurrentLyricTimestamp()
+            if timestamp == None:
+                timestamp = self.song.getCurrentLyricTimestamp(at=at)
             index = list(self.song.lyrics.lyrics.keys()).index(timestamp)
             return(index)
         return(-1)
@@ -265,6 +268,10 @@ class SpotifyPlayer:
     def likeCurrentSong(self) -> bool:
         """Likes the currently playing song on the user"s active device."""
         return(self.song.like())
+    
+    def getCurrentTime(self) -> float:
+        """Returns the current playback time of the currently playing song in seconds."""
+        return(self.song.progress)
     
     def getAvailablePlaylists(self) -> list:
         """Returns a list of available playlists for the user."""
@@ -274,6 +281,10 @@ class SpotifyPlayer:
     def addToPlaylist(self, playlistId) -> bool:
         """Adds the currently playing song to the specified playlist."""
         return(self.song.addToPlaylist(playlistId))
+    
+    def getSongDuration(self) -> float:
+        """Returns the duration of the currently playing song in seconds."""
+        return(self.song.duration)
     
     def getPlaybackProgressPercent(self) -> float:
         """Returns the playback progress of the currently playing song in seconds."""
@@ -290,7 +301,7 @@ class SpotifyPlayer:
         Seeks to the specified time in seconds in the currently playing song.
         """
         try:
-            if self._isAuthenticated() and self.song.progress is not None:
+            if self._isAuthenticated():
                 self.sp.seek_track(int(seconds * 1000))
         except:   #< If not premium user, this will fail
             print("Seeking is not supported for non-premium users or if the song is not playing.")
@@ -304,7 +315,7 @@ class SpotifyPlayer:
             seconds = self.song.duration * percent
             self.seekTo(seconds)
 
-    def startUpdateLoop(self, updateInterval=1):
+    def startUpdateLoop(self, updateInterval=1, callback=None) -> None:
         """
         Starts a loop that updates the song info and lyrics at the specified interval.
         """
@@ -312,6 +323,8 @@ class SpotifyPlayer:
             while True:
                 self._updateSongInfo()
                 time.sleep(updateInterval)
+                if callback:
+                    callback(self.song)
         
         threading.Thread(target=loop, daemon=True).start()
 
