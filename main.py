@@ -120,6 +120,7 @@ class MiniSpotifyPlayer(BoxLayout):
         self.playlists = self.backend.getAvailablePlaylists()
 
         self._setup_ui()
+        self.idleCheckEvent = Clock.schedule_interval(self._check_idle, 0.5)
         self._start_update_loop()
 
     def _setup_ui(self):
@@ -218,31 +219,17 @@ class MiniSpotifyPlayer(BoxLayout):
         in_y = widget_y - margin_vertical <= y <= widget_y + height + margin_vertical
 
         if in_x and in_y:
-            self._show_controls()
+            self.isInsideControlsRegion = True
             if self.lastPos != (x, y):
+                self._show_controls()
                 self.lastMouseMoveTime = time.time()
             self.lastPos = (x, y)
-            if not self.isInsideControlsRegion:
-                self.isInsideControlsRegion = True
-                self._start_idle_timer()
         else:
             self.isInsideControlsRegion = False
-            if self.idleCheckEvent:
-                self.idleCheckEvent.cancel()
-                self.idleCheckEvent = None
-                self._hide_controls()
-
-    def _start_idle_timer(self):
-        if self.idleCheckEvent:
-            self.idleCheckEvent.cancel()
-        self.idleCheckEvent = Clock.schedule_interval(self._check_idle, 0.5)
 
     def _check_idle(self, dt):
         if not self.isInsideControlsRegion:
             self._hide_controls()
-            if self.idleCheckEvent:
-                self.idleCheckEvent.cancel()
-                self.idleCheckEvent = None
         elif time.time() - self.lastMouseMoveTime > 1:
             self._hide_controls()
 
@@ -375,4 +362,4 @@ class MiniSpotifyApp(App):
         return(MiniSpotifyPlayer(imageFolder=self.imageFolder, secretsFile=self.secretsFile))
 
 if __name__ == "__main__":
-    MiniSpotifyApp(secretsFile="mySecrets.json").run()
+    MiniSpotifyApp(secretsFile="secrets.json").run()

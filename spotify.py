@@ -104,6 +104,8 @@ class Song:
 
     def updateSongInfo(self) -> bool:
         current = retryOnTimeout(self.sp.current_playback)
+        if current == None or current.get("item") == None:
+            return(False)
 
         track = current["item"]
         songName = track["name"]
