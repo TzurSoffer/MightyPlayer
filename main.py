@@ -108,7 +108,8 @@ class MiniSpotifyPlayer(BoxLayout):
         self.imageFolder = imageFolder
         self.backend = SpotifyPlayer(secretsFile=secretsFile)
         self.backend.startUpdateLoop(updateInterval=2, callback=self._update)
-        
+
+        self.lastPos = (0, 0)
         self.lastMouseMoveTime = time.time()
         self.isInsideControlsRegion = False
         self.idleCheckEvent = None
@@ -218,7 +219,9 @@ class MiniSpotifyPlayer(BoxLayout):
 
         if in_x and in_y:
             self._show_controls()
-            self.lastMouseMoveTime = time.time()
+            if self.lastPos != (x, y):
+                self.lastMouseMoveTime = time.time()
+            self.lastPos = (x, y)
             if not self.isInsideControlsRegion:
                 self.isInsideControlsRegion = True
                 self._start_idle_timer()
@@ -227,6 +230,7 @@ class MiniSpotifyPlayer(BoxLayout):
             if self.idleCheckEvent:
                 self.idleCheckEvent.cancel()
                 self.idleCheckEvent = None
+                self._hide_controls()
 
     def _start_idle_timer(self):
         if self.idleCheckEvent:
