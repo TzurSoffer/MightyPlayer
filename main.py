@@ -1,4 +1,3 @@
-import copy
 import os
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 import threading
@@ -110,6 +109,10 @@ class MiniSpotifyPlayer(BoxLayout):
         self.imageFolder = imageFolder
         self.backend = SpotifyPlayer(secretsFile=secretsFile)
         self.backend.startUpdateLoop(updateInterval=2, callback=self._update)
+        
+        self.lastMouseMoveTime = time.time()
+        self.isInsideControlsRegion = False
+        self.idleCheckEvent = None
 
         self.current_index = 0
         self.time = Timer()
@@ -197,28 +200,48 @@ class MiniSpotifyPlayer(BoxLayout):
         self.progress_bar.max = 1
         self.progress_bar.bind(on_touch_down=self._on_progress_touch)
         self.root_layout.add_widget(self.progress_bar)
-
-        # Hover logic for center controls only
-        def on_mouse_pos(window, pos):
-            # Get position and size of the controls container
-            x, y = self.controls_container.to_window(*self.controls_container.pos)
-            width, height = self.controls_container.size
-
-            # Add margin around the controls (e.g., 30px above and below)
-            margin_vertical = 80
-            margin_horizontal = 50  # optional
-
-            in_x = x - margin_horizontal <= pos[0] <= x + width + margin_horizontal
-            in_y = y - margin_vertical <= pos[1] <= y + height + margin_vertical
-
-            if in_x and in_y:
-                self._show_controls()
-            else:
-                self._hide_controls()
-
-        Window.bind(mouse_pos=on_mouse_pos)
+        Window.bind(mouse_pos=self._on_mouse_move)
 
         self._update_lyrics()
+
+    def _on_mouse_move(self, window, pos):
+        x, y = pos
+        widget_x, widget_y = self.controls_container.to_window(*self.controls_container.pos)
+        width, height = self.controls_container.size
+
+        # Optional margin to make detection more forgiving
+        margin_vertical = 80
+        margin_horizontal = 50
+
+        in_x = widget_x - margin_horizontal <= x <= widget_x + width + margin_horizontal
+        in_y = widget_y - margin_vertical <= y <= widget_y + height + margin_vertical
+
+        if in_x and in_y:
+            self._show_controls()
+            self.lastMouseMoveTime = time.time()
+            if not self.isInsideControlsRegion:
+                self.isInsideControlsRegion = True
+                self._start_idle_timer()
+        else:
+            self.isInsideControlsRegion = False
+            if self.idleCheckEvent:
+                self.idleCheckEvent.cancel()
+                self.idleCheckEvent = None
+
+    def _start_idle_timer(self):
+        if self.idleCheckEvent:
+            self.idleCheckEvent.cancel()
+        self.idleCheckEvent = Clock.schedule_interval(self._check_idle, 0.5)
+
+    def _check_idle(self, dt):
+        if not self.isInsideControlsRegion:
+            self._hide_controls()
+            if self.idleCheckEvent:
+                self.idleCheckEvent.cancel()
+                self.idleCheckEvent = None
+        elif time.time() - self.lastMouseMoveTime > 1:
+            self._hide_controls()
+
 
     def _show_controls(self):
         if self.controls_container.opacity == 0:
